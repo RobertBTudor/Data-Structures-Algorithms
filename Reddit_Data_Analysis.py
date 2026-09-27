@@ -104,3 +104,26 @@ print("Latest Post")
 print(f"Title: {latest_post.title}")
 print(f"Score: {latest_post.score}, Comments: {latest_post.comment_count}")
 print(f"Posted: {latest_time}\n")
+
+#=========================================
+# Data Visualization
+#=========================================
+
+#Sort posts by comment count, most comments first, and take the top 10
+top_10_posts = sorted(posts, key=lambda p: p.comment_count, reverse=True)[:10]
+
+#Shorten long titles so they fit under the bars
+titles = [p.title[:20] for p in top_10_posts]
+top_comment_counts = [p.comment_count for p in top_10_posts]
+
+plt.figure(figsize=(10, 6))
+plt.bar(titles, top_comment_counts)
+plt.xticks(rotation=45, ha="right")
+plt.xlabel("Post Title")
+plt.ylabel("Number of Comments")
+plt.title("Top 10 Posts by Comment Count (r/askscience)")
+plt.tight_layout()
+plt.savefig("reddit_top10_comments.png")
+print("Saved reddit_top10_comments.png")
+
+plt.show()
