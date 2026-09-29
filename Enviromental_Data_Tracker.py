@@ -226,3 +226,210 @@ class DataList:
                 # Matches both the place and the date range.
                 results.append(node)
         return results
+
+    # ---------------------------------------------------------------------
+# Menu helpers: turn user input into data
+# ---------------------------------------------------------------------
+
+# Keeps asking until the user types a date that parse_date() accepts
+def prompt_for_date(prompt_text):
+    while True:
+        user_date = input(prompt_text).strip()
+        try:
+            parse_date(user_date)
+            return user_date
+        except ValueError:
+            print("Must be in MM-DD-YYYY form, try again.")
+
+
+# Keeps asking until the user types a number
+def prompt_for_float(prompt_text):
+    while True:
+        user_num = input(prompt_text).strip()
+        try:
+            return float(user_num)
+        except ValueError:
+            print("Input must be a number, try again.")
+
+
+# Keeps asking until the user types a whole number greater than zero
+def prompt_for_positive_int(prompt_text):
+    while True:
+        user_num = input(prompt_text).strip()
+        try:
+            value = int(user_num)
+        except ValueError:
+            print("Input must be a whole number, try again.")
+            continue
+        if value <= 0:
+            print("Input must be greater than zero, try again.")
+            continue
+        return value
+
+
+# Same as prompt_for_float, but an empty answer falls back to a default
+def prompt_for_float_with_default(prompt_text, default):
+    user_num = input(prompt_text).strip()
+    if user_num == "":
+        return default
+    try:
+        return float(user_num)
+    except ValueError:
+        print(f"Not a number, using default of {default} instead.")
+        return default
+
+
+# Builds a smaller DataList containing only one location's readings, so
+# moving_average() / detect_anomalies() aren't mixing different locations
+def filter_by_location(data, location):
+    subset = DataList()
+    for node in data:
+        if node.location.lower() == location.lower():
+            subset.insert(node.location, node.value, format_date(node.date))
+    return subset
+
+
+# Option 1: reads location/value/date from the user and inserts them
+def menu_add_entry(data):
+    location = input("Location (e.g. Miami): ").strip()
+    value = prompt_for_float("Value (e.g. 29.4): ")
+    date_str = prompt_for_date("Date (MM-DD-YYYY): ")
+    data.insert(location, value, date_str)
+    print(f"Added [{date_str}] {location}: {value}")
+
+
+# Option 2: shows every reading recorded at one location
+def menu_search_location(data):
+    location = input("Location to search for: ").strip()
+    matches = [node for node in data if node.location.lower() == location.lower()]
+
+    if not matches:
+        print(f"No entries found for {location}.")
+        return
+
+    for node in matches:
+        print(f"[{format_date(node.date)}] {node.location}: {node.value}")
+
+
+# Option 3: shows every reading recorded on one exact date, any location
+def menu_search_date(data):
+    date_str = prompt_for_date("Date to search for (MM-DD-YYYY): ")
+    target_date = parse_date(date_str)
+    matches = [node for node in data if node.date == target_date]
+
+    if not matches:
+        print(f"No entries found on {date_str}.")
+        return
+
+    for node in matches:
+        print(f"[{format_date(node.date)}] {node.location}: {node.value}")
+
+
+# Option 4: shows readings for one location within a start/end date range,
+# using DataList.search() (single pass, stops early once past the end date)
+def menu_search_range(data):
+    location = input("Location to search for: ").strip()
+    start_str = prompt_for_date("Start date (MM-DD-YYYY): ")
+    end_str = prompt_for_date("End date (MM-DD-YYYY): ")
+
+    matches = data.search(location, start_str, end_str)
+
+    if not matches:
+        print(f"No entries found for {location} between {start_str} and {end_str}.")
+        return
+
+    for node in matches:
+        print(f"[{format_date(node.date)}] {node.location}: {node.value}")
+
+
+# Option 5: calculates the moving average over a chosen window size,
+# optionally limited to a single location
+def menu_moving_average(data):
+    location = input("Location (leave blank to include every location): ").strip()
+    window_size = prompt_for_positive_int("Window size (readings per average): ")
+
+    dataset = filter_by_location(data, location) if location else data
+    averages = dataset.moving_average(window_size)
+
+    if not averages:
+        print("Not enough readings for that window size.")
+        return
+
+    rounded = [round(value, 2) for value in averages]
+    print(f"Moving averages (window={window_size}): {rounded}")
+
+
+# Option 6: flags readings that jump too far from their recent local average,
+# optionally limited to a single location
+def menu_detect_anomalies(data):
+    location = input("Location (leave blank to include every location): ").strip()
+    window_size = prompt_for_positive_int("Window size (prior readings to compare against): ")
+    threshold = prompt_for_float_with_default(
+        "Sensitivity in standard deviations (press Enter for default 2.0): ", 2.0
+    )
+
+    dataset = filter_by_location(data, location) if location else data
+    anomalies = dataset.detect_anomalies(window_size, threshold)
+
+    if not anomalies:
+        print("No anomalies found.")
+        return
+
+    for node, mean, deviation in anomalies:
+        print(f"[{format_date(node.date)}] {node.location}: value={node.value} "
+              f"local_mean={mean:.2f} deviation={deviation:.2f} std devs")
+
+
+# Prints the list of choices the user can pick from
+def print_menu():
+    print("\n=== Environmental Data Menu ===")
+    print("1. Add new entry")
+    print("2. Search by location")
+    print("3. Search by date")
+    print("4. Search by location and date range")
+    print("5. Moving average")
+    print("6. Detect anomalies")
+    print("7. Show all entries")
+    print("8. Exit")
+
+
+# Main loop: keeps showing the menu and running whichever option is picked
+def run_menu(data):
+    actions = {
+        "1": menu_add_entry,
+        "2": menu_search_location,
+        "3": menu_search_date,
+        "4": menu_search_range,
+        "5": menu_moving_average,
+        "6": menu_detect_anomalies,
+        "7": lambda data: data.display(),
+    }
+
+    while True:
+        print_menu()
+        choice = input("Choose an option (1-8): ").strip()
+
+        if choice == "8":
+            print("Goodbye!")
+            break
+        elif choice in actions:
+            actions[choice](data)
+        else:
+            print("Please enter a number from 1 to 8.")
+
+
+# -------------------------------------
+# Demo
+# -------------------------------------
+if __name__ == "__main__":
+    #Sample list with two locations and one spike
+    data = DataList()
+    data.insert("Miami", 28.5, "07-01-2026")
+    data.insert("Miami", 29.0, "07-02-2026")
+    data.insert("Miami", 29.4, "07-03-2026")
+    data.insert("Miami", 40.0, "07-04-2026")
+    data.insert("Miami", 29.6, "07-05-2026")
+    data.insert("Denver", 5.0, "07-01-2026")
+    data.insert("Denver", 5.5, "07-02-2026")
+
+    run_menu(data)
